@@ -64,7 +64,7 @@ async def start_bot(token):
                             log(f"[{bot.user}] Error in {channel.guild.name}: {e}")
             except Exception as e:
                 log(f"[{bot.user}] Unexpected error: {e}")
-            await asyncio.sleep(2)  # 2 seconds 
+            await asyncio.sleep(3)  # 2 seconds 
 
     while True:
         try:
