@@ -3,6 +3,8 @@ from discord.ext import commands
 import discord
 import random
 import time
+import os
+from aiohttp import web
 
 # Logging helper
 def log(msg):
@@ -64,7 +66,7 @@ async def start_bot(token):
                             log(f"[{bot.user}] Error in {channel.guild.name}: {e}")
             except Exception as e:
                 log(f"[{bot.user}] Unexpected error: {e}")
-            await asyncio.sleep(3)  # 2 seconds 
+            await asyncio.sleep(2)  # 2 seconds 
 
     while True:
         try:
@@ -73,13 +75,53 @@ async def start_bot(token):
             log(f"[{token[:10]}...] Reconnect failed: {e}")
             await asyncio.sleep(10)
 
+# Dummy web server for Render
+async def handle(request):
+    return web.Response(text="Bot is running!")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get('/', handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    log(f"Web server started on port {port}")
+
 async def main():
     tasks = []
-    with open("tokens.txt", "r") as f:
-        for line in f:
-            token = line.strip()
-            if token:  # Skip empty lines
-                tasks.append(asyncio.create_task(start_bot(token)))
+    
+    # Start the dummy web server task so Render doesn't kill the service
+    tasks.append(asyncio.create_task(start_web_server()))
+
+    # Read tokens from .env variable TOKENS (comma separated)
+    env_tokens = os.environ.get("TOKENS", "")
+    tokens = []
+    
+    if env_tokens:
+        tokens = [t.strip() for t in env_tokens.split(",") if t.strip()]
+    else:
+        # Fallback to tokens.txt if env var is empty
+        try:
+            with open("tokens.txt", "r") as f:
+                for line in f:
+                    token = line.strip()
+                    if token:
+                        tokens.append(token)
+        except FileNotFoundError:
+            log("No tokens.txt found and TOKENS env var is empty.")
+
+    if not tokens:
+        log("No tokens provided! Set the TOKENS environment variable as a comma-separated list.")
+        # We still sleep forever to allow the web server to run and not crash immediately
+        await asyncio.sleep(3600)
+        return
+
+    for token in tokens:
+        tasks.append(asyncio.create_task(start_bot(token)))
+        
     await asyncio.gather(*tasks)
 
 # Start everything
